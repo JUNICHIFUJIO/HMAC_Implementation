@@ -106,7 +106,7 @@ class MyBitArray:
                                 ++bitIndex
 
         def FromBits(self, bits):
-                self.bits = bits
+                self.bits = bits.copy()
                 self.__len__ = len(self.bits)
 
         def ToBytes(self):
@@ -124,19 +124,40 @@ class MyBitArray:
 
                 return bytes(result)
 
-        def extend(self, int_iterable):
-                self.bits.extend(int_iterable)
+        def extend(self, bit_array):
+                try:
+                        self.bits.extend(bit_array.bits)
+                except AttributeError:
+                        self.bits.extend(bit_array)
                 return self
 
-        def __reversed__(self):
-                result = MyBitArray()
-                result.FromBits(self.bits)
-                for i in range(len(self)):
-                        tempBit = result[i]
-                        result[i] = result[len(self) - 1 - i]
-                        result[len(self) - 1 - i] = tempBit
-                        
-                return result
+        # Returns a fresh MyBitArray that contains this bit array's bits rotated
+        # to the left by n_rotations
+        def RotateLeft(n_rotations = 1)
+                try:
+                        if n_rotations >= len(self.bits):
+                                n_rotations %= len(self.bits)
+                        shiftedBits = MyBitArray()
+                        shiftedBits.extend(bits[n_rotations:])
+                        shiftedBits.extend(bits[:n_rotations])
+                        return shiftedBits
+                except ZeroDivisionError, IndexError:
+                        return MyBitArray()
+                # check its length, get the MSB, << it, and then append it and return
+
+        # Returns a fresh MyBitArray that contains this bit array's bits rotated
+        # to the right by n_rotations
+        def RotateRight(n_rotations = 1)
+                try:
+                        if n_rotations >= len(self.bits):
+                                n_rotations %= len(self.bits)
+                        # check its length, get the LSB, >> it, and then if LSB was 1, XOR it with a 1 <<'d the length
+                        shiftedBits = MyBitArray()
+                        shiftedBits.extend(bits[bits.__len__-n_rotations:])
+                        shiftedBits.extend(bits[:bits.__len__-n_rotations])
+                        return shiftedBits
+                except ZeroDivisionError, IndexError:
+                        return MyBitArray()
 
         ##################################################################
         # Handler methods
@@ -152,6 +173,16 @@ class MyBitArray:
                 deepcopy = type(self)()
                 deepcopy.FromBits(copy.deepcopy(self.bits, memo))
                 return deepcopy
+        
+        def __reversed__(self):
+                result = MyBitArray()
+                result.FromBits(self.bits)
+                for i in range(len(self)):
+                        tempBit = result[i]
+                        result[i] = result[len(self) - 1 - i]
+                        result[len(self) - 1 - i] = tempBit
+                        
+                return result
                                    
         def __xor__(self, other):
                 reverseResult = []
@@ -270,20 +301,39 @@ class DES:		# define the DES class
         def GetScriptDirectory(self):
                 return os.path.dirname(os.path.realpath(sys.argv[0]))
 
-        # Assumes the extension is included in the file name
-        def RetrieveByteData(data_file_name):
-                directoryPath = GetScriptDirectory() + '\\'
-                file = open(directoryPath + data_file_name, "rb")
-                byteData = file.read()
-                file.close()
-                return byteData
+        def GetFileName(path):
+                fileNameWithExtension = GetFileNameWithExtension(path)
+                fileName = fileNameWithExtension.split(".")[0]
 
-        # Assumes the extension is included in the file name
+                return fileName
+
+        def GetFileNameWithExtension(path):
+                directories = path.split("\\")
+                fileNameWithExtension = directories[len(directories) - 1]
+
+                return fileNameWithExtension
+
+        def GetFileExtension(file_name):
+                fileExtension = file_name.split(".")[0]
+
+                return fileExtension
+
+        # Assumes the extension is included in the file name, but that the directory path is not
         def WriteByteDataFile(data_file_name, data):
-                directoryPath = GetScriptDirectory() + '\\'
-                file = open(directoryPath + data_file_name, "wb")
+                directoryPath = GetScriptDirectory() + '\'
+                dataFileName = GetFileNameWithExtension(data_file_name)
+                file = open(directoryPath + dataFileName, "wb")
                 file.write(data)
                 file.close()
+
+        def ReadByteDataFile(data_file_name):
+                directoryPath = GetScriptDirectory() + "\"
+                dataFileName = GetFileNameWithExtension(data_file_name)
+                file = open(directoryPath + dataFileName, "rb")
+                result = file.read()
+                file.close()
+
+                return result
 
 	def GenKey(self, password, output_file_name):
                 # get the first 8 bytes (64 bits) of the hash and save it as the key
@@ -334,7 +384,7 @@ class DES:		# define the DES class
                 # close the output file
                 outputFile.close()
 
-        def GetECBBlock(input_bit_array, index):
+        def GetECBBlock(input_bit_array, index = 0):
                 block = MyBitArray()
                         
                 # determine if the bit array has enough bits left to form a full block
@@ -405,7 +455,7 @@ class DES:		# define the DES class
 
                 return result
         
-        def FeistelRoundEncryption(data_input, key_left, key_right, round_number):
+        def ProcessFeistelRound(data_input, key_left, key_right, round_number, is_encryption):
                 # requires a 64 bit input. if not 64 bits, throw an error # ERROR TESTING NEED TO IMPLEMENT
                 try:
                         if len(data_input) != 64 || len(key_left) != 28 || len(key_right) != 28:
@@ -425,7 +475,10 @@ class DES:		# define the DES class
                 SplitBitArray(roundResult.dataInput, [Ml, Mr])
 
                 # generate the subkey for the round
-                subkey = EncryptionSubKeyGenerator(key_left, key_right, rotationSchedule[round_number])
+                if is_encryption == True:
+                        subkey = DESSubKeyGenerator(key_left, key_right, rotationSchedule[round_number], is_encryption)
+                else:
+                        subkey = DESSubKeyGenerator(key_left, key_right, rotationSchedule[round_number], False)
                 SplitBitArray(subkey, [roundResult.keyLeft, roundResult.keyRight]) # ERROR TESTING set left and right keys as subkeys halves
 
                 # Process Feistel Function
@@ -442,7 +495,7 @@ class DES:		# define the DES class
                 # returns the output of the round
                 return roundResult
         
-        def EncryptECB(input_bit_array, key_bit_array, output_file_handler, write_to_output_file = True):
+        def EncryptECB(input_bit_array, key_bit_array, output_file_handler, is_encryption, write_to_output_file = True):
                 # run the PC1 permutation on the key to select 56 bits of the 64 bits of the key
                 permutedKey = ProcessPermutation(key_bit_array, initialPermutationBox)
                 
@@ -478,7 +531,7 @@ class DES:		# define the DES class
                                 if(i > 0):
                                         roundInfo.inputData = roundInfo.outputData
                                 roundInfo.roundNumber = i
-                                roundInfo.outputData = FeistelRoundEncryption(roundInfo.dataInput, roundInfo.keyLeft, roundInfo.keyRight, roundInfo.roundNumber, roundInfo)
+                                roundInfo.outputData = ProcessFeistelRound(roundInfo.dataInput, roundInfo.keyLeft, roundInfo.keyRight, roundInfo.roundNumber, roundInfo)
                                 # ERROR TESTING key has to be mutable -> use a list of bits
 
                         # run the final permutation of the data
@@ -514,6 +567,7 @@ class DES:		# define the DES class
         # Returns a byte array of the incrementated initialization vector
         # If all bytes are at the maximum value, all bytes are set to 0
         def IncrementInitializationVector(self, bit_array_of_IV):
+                # ERROR TESTING will just make bytes of 1s and 0s. Convert to an integer and transform into a byte
                 byte_array = bytes(bit_array_of_IV.bits)
                 newIVBytes = bytearray(byte_array)
                 for i in reversed(range(len(result)):
@@ -534,19 +588,37 @@ class DES:		# define the DES class
                 IVAndKeyBytes = bytearray(IV_bit_array.ToBytes())
                 IVAndKeyBytes.extend(key_bit_array.ToBytes())
                 # Write the IV + key byte stream to a file
-                IVAndKeyFileName = output_file_handler.name + "_IVKey.txt"
+                IVAndKeyFileName = GetScriptDirectory() + "\\" + GetFileName(output_file_handler.name) + "_IVKey.txt"
                 WriteByteDataFile(IVAndKeyFileName, data)
 
                 return IVAndKeyFileName
-                
-        def EncryptCBC(input_bit_array, key_bit_array, output_file_handler):
-                IV = CreateInitializationVector()
-                lastCBCResult = IV
 
-                index = 0
+        def ReadIVKeyFile(ciphertext_file_handler):
+                # Find the IVKeyFile
+                IVAndKeyFileName = GetScriptDirectory() + "\\" + GetFileName(ciphertext_file_handler.name) + "_IVKey.txt"
+                return ReadByteDataFile(IVAndKeyFileName, data)
+                
+        def RunCBCMode(input_bit_array, key_bit_array, output_file_handler, is_encryption):
+                if is_encryption == True:
+                        IV = CreateInitializationVector()
+                        lastCBCResult = IV
+                else:
+                        # retrieve the IV and key from the IV and key file
+                        ciphertextInput = GetECBBlock(input_bit_array)
+                        lastCBCResult = ciphertextInput
+
+                        # retrieve the IV from the IV and key file (key is already derived in general Decrypt section)
+                        IV = ExtractIVFor(output_file_handler)
+
+                if is_encryption:
+                        index = 0 # start at beginning of plaintext
+                        readTextForwards = True
+                else:
+                        index = len(input_bit_array) - 1 # start at end of ciphertext
+                        readTextForwards = False
                 while index < len(input_bit_array):
-                        plaintextInput = GetECBBlock(input_bit_array, index)
-                        ECBInput = plaintextInput ^ lastCBCResult
+                        textInput = GetECBBlock(input_bit_array, index, readTextForwards)
+                        ECBInput = textInput ^ lastCBCResult
                         
                         lastCBCResult = EncryptECB(ECBInput, key_bit_array, output_file_handler)
                         # ERROR TESTING might refer to an out of scope object now?
@@ -555,6 +627,33 @@ class DES:		# define the DES class
                 IVAndKeyFileName = WriteIVKeyFile(IV, key_bit_array, output_file_handler)
                 
                 return IVAndKeyFileName
+
+        def DecryptCBC(ciphertext_bit_array, IV_bit_array, key_bit_array, output_file_handler):
+                index = len(ciphertext_bit_array) - 1 # start at the end of the ciphertext bit array
+                lastCBCResult = IV_bit_array
+                readTextForwards = False
+                
+                while index > 0:
+                        textInput = GetECBBlock(ciphertext_bit_array, index, readTextForwards)
+                        lastCBCResult = textInput
+                        ECBInput = textInput
+
+                        # get result of using DES
+                        isEncryption = False
+                        writeToOutputFile = False
+                        DESResult = EncryptECB(ECBInput, key_bit_array, output_file_handler, isEncryption, writeToOutputFile)
+
+                        # XOR last cbc result or IV with result of DES
+                        roundResult = 
+
+                        # update loop variables
+                        lastCBCResult = textInput
+                        index -= expectedBlockSize
+
+                        # detect if there are padding bytes present (only first iteration)
+                
+                        # write the round result
+                        WriteByteDataFile(output_file_name.name.find(
                         
         def EncryptCTR(input_bit_array, key_bit_array, output_file_handler):
                 # create an initialization vector (IV)
@@ -573,6 +672,15 @@ class DES:		# define the DES class
 
                 return IVAndKeyFileName
 
+        def GetFinalKey(key_bit_array):
+                # pretend it has gone through 16 feistel function iterations
+                n_total_rotations = 0
+                for n_rotations in self.rotationSchedule:
+                        n_total_rotations += n_rotations
+                finalKey = key_bit_array.RotateLeft(n_total_rotations)
+                
+                return finalKey        
+
 	def Decrypt(input_file, key_file, output_file_name, mode):
                 # get the input bits from the input file name
                 dataInput = MyBitArray()
@@ -582,19 +690,23 @@ class DES:		# define the DES class
 		key = MyBitArray()
 		key.FromBytes(RetrieveByteData(key_file_name))
 
+                # process the key to make it equal to the final iteration through DES' key
+                key = GetFinalKey(key)
+
 		# open the output file for writing
 		outputFileName = GetScriptDirectory() + output_file_name + ".txt"
                 outputFile = open(outputFileName, "wb")
 
                 # get the mode from the passed in string
                 encryptionMode = GetEncryptionMode(mode_string)
+                is_encryption = False
                 if encryptionMode == DESModes.cipherBlockChain:
-                        DecryptionCBC(dataInput, key, outputFile)
+                        RunCBCMode(dataInput, key, outputFile, is_encryption)
                 else if encryptionMode == DESModes.counter:
-                        DecryptionCTR(dataInput, key, outputFile)
+                        RunCTRMode(dataInput, key, outputFile, is_encryption)
                 else:
                         # run the process
-                        DecryptionECB(dataInput, key, outputFile)
+                        RunECBMode(dataInput, key, outputFile, is_encryption)
 
                 # close the output file
                 outputFile.close()
@@ -619,7 +731,7 @@ class DES:		# define the DES class
                 if (arrIndex * nInArr) < len(input_bit_array):
                         list_of_result_arrays[len(list_of_result_arrays) - 1].expand(input_bit_array[arrIndex * nInArr:])
 
-        def EncryptionSubKeyGenerator(key_left, key_right, n_rotations):
+        def DESSubKeyGenerator(key_left, key_right, n_rotations, is_encryption):
                 # both inputs should be 28 bits long. if not, throw an exception # ERROR TESTING need to implement
                 # ERROR TESTING
                 try:
@@ -627,43 +739,15 @@ class DES:		# define the DES class
                                 raise ValueError
                 
                 # rotate the key halves
-                rotatedKeyLeft = EncryptionKeyRotation(key_left, n_rotations)
-                rotatedKeyRight = EncryptionKeyRotation(key_right, n_rotations)
+                if is_encryption == True:
+                        rotatedKeyLeft = key_left.RotateLeft(n_rotations)
+                        rotatedKeyRight = key_right.RotateLeft(n_rotations)
+                else:
+                        rotatedKeyLeft = key_left.RotateRight(n_rotations)
+                        rotatedKeyRight = key_right.RotateRight(n_rotations)
 
                 # pass through PC2
                 roundKey = MyBitArray()
                 roundKey.FromBits(rotatedKeyLeft.bits)
                 roundKey.extend(rotatedKeyRight.bits)
                 return ProcessPermutation(roundKey, pc2Box)
-
-        def EncryptionKeyRotation(key, n_rotations):
-                rotatedKey = BitRotateLeft(key, n_rotations)
-                return rotatedKey
-
-        def DecryptionKeyRotation(key, n_rotations):
-                rotatedKey = BitRotateRight(key, n_rotations)
-                return rotatedKey
-
-        # Assumes that bits is an array of bits (like MyBit Array) MUST support slicing
-        def BitRotateLeft(bits, n_rotations = 1)
-                shiftedBits = []
-                shiftedBits.extend(bits[n_rotations:])
-                shiftedBits.extend(bits[:n_rotations])
-                result = MyBitArray()
-                result.FromBits(shiftedBits)
-                return result
-                # check its length, get the MSB, << it, and then append it and return
-
-        # Assumes that bits is an array of bits that supports slicing
-        def BitRotateRight(bits, n_rotations = 1)
-                # check its length, get the LSB, >> it, and then if LSB was 1, XOR it with a 1 <<'d the length
-                shiftedBits = []
-                shiftedBits.extend(bits[bits.__len__-n_rotations:])
-                shiftedBits.extend(bits[:bits.__len__-n_rotations])
-                result = MyBitArray()
-                result.FromBits(shiftedBits)
-                return result
-
-
-        def Mangle(Mr, subkey):
-                return Mr ^ subkey # ERROR TESTING should XOR Mr with subkey to produce mangled data
