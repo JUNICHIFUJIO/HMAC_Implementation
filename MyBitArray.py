@@ -4,6 +4,9 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
+######################################
+#            CLASS START
+######################################
 # Takes a series of bytes or bits and converts them to a manageable list of bits
 class MyBitArray:
     ######################################
@@ -33,7 +36,8 @@ class MyBitArray:
     def FromBits(self, bits):
         self.bits = bits.copy()
 
-    # Converts stored bits to bytes.
+    # Converts stored bits to bytes array.
+    # Returns fresh MyBitArray holding bytes.
     def ToBytes(self):
         result = bytearray()
         byteIndex = 0
@@ -48,7 +52,8 @@ class MyBitArray:
 
         return bytes(result)
 
-    # Appends a single bit to the bit array
+    # Appends a single bit to the bit array.
+    # Raises ValueError if bit isn't a 1 or 0.
     def append(self, bit):
         if int(bit) == 1 or int(bit) == 0:
             self.bits.append(bit)
@@ -63,7 +68,7 @@ class MyBitArray:
             self.bits.extend(bit_array)
 
     # Returns a fresh MyBitArray that contains this bit array's bits rotated
-    # to the left by n_rotations
+    # to the left by n_rotations.
     def RotateLeft(self, n_rotations = 1):
         try:
             n_rotations %= len(self.bits)
@@ -75,19 +80,19 @@ class MyBitArray:
             return MyBitArray()
 
     # Returns a fresh MyBitArray that contains this bit array's bits rotated
-    # to the right by n_rotations
+    # to the right by n_rotations.
     def RotateRight(self, n_rotations = 1):
         try:
             n_rotations %= len(self.bits)
             shiftedBits = MyBitArray()
-            shiftedBits.extend(self.bits[self.bits.__len__-n_rotations:])
-            shiftedBits.extend(self.bits[:self.bits.__len__-n_rotations])
+            shiftedBits.extend(self.bits[len(self.bits)-n_rotations:])
+            shiftedBits.extend(self.bits[:len(self.bits)-n_rotations])
             return shiftedBits
         except (ZeroDivisionError, IndexError) as error:
             return MyBitArray()
 
     ######################################
-    #            INNATE METHODS
+    #           BUILT-IN METHODS
     ######################################
     def __len__(self):
         return len(self.bits)
@@ -153,10 +158,6 @@ class MyBitArray:
         return string
 
     ######################################
-    #            FIELDS
-    ######################################
-
-    ######################################
     #            ITERATOR
     ######################################
     def __iter__(self):
@@ -197,7 +198,9 @@ class MyBitArray:
             self.index -= 1
             return result
 
-# Main
+######################################
+#               MAIN
+######################################
 if __name__ == "__main__":
     print("Running Main for MyBitArray!")
     BitArray = MyBitArray()
