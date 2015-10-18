@@ -176,7 +176,7 @@ class DES:
         [7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8],
         [2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]
         ]
-    # Class fields representing constants
+    # Class fields representing generic constants
     expectedBlockLength = 64
     bitsPerByte = 8
     sBoxInputLength = 6
@@ -185,7 +185,29 @@ class DES:
     ######################################
     #               METHODS
     ######################################
+    # Splits bits evenly between a passed in list of bit arrays. The bit arrays
+    # must already be instantiated bit arrays. Consecutive bits stay consecutive.
+    # If unable to split evenly, the remainder of bits goes to the end of the
+    # last result array.
+    def SplitBitArray(self, input_bit_array, list_of_result_arrays):
+        # Guard condition
+        if(list_of_result_arrays == None or len(list_of_result_arrays) < 1):
+            return
 
+        # transfer the bits over
+        arrIndex = 0
+        nInArr = int(len(input_bit_array) / len(list_of_result_arrays))
+        for bit_array in list_of_result_arrays:
+            bit_array.extend(input_bit_array[arrIndex * nInArr : (arrIndex + 1) * nInArr])
+            arrIndex += 1
+
+        # transfer the remaining bits to the last array
+        if (arrIndex * nInArr) < len(input_bit_array):
+            list_of_result_arrays[len(list_of_result_arrays) - 1].expand(input_bit_array[arrIndex * nInArr:])
+    
+    ######################################
+    #           KEY GENERATION
+    ######################################
     # Generate an encryption key, given a password. Utilizes the native sha256
     # hashing algorithm. Writes the file to the same directory holding the
     # top level executable script.
@@ -201,31 +223,45 @@ class DES:
         # Write to binary file in the same directory as the top level script
         return WriteByteDataFile("EncryptionKey", keyHash)
 
-    # Get a block of input data ready from the input bit array
-    # Pads with PKCS #5 if there are less bits than the expected block size
-    # Returns the expected input data block, properly padded if necessary,
-    # as a bit array.
-    def GetDESBlock(self, input_bit_array, index = 0):
-        block = MyBitArray()
-                        
-        # Determine if the bit array has enough bits left to form a full block
-        paddingAmount = 0
-        if index + self.expectedBlockLength > len(input_bit_array):
-            paddingAmount = int((index + self.expectedBlockLength - len(input_bit_array))/ self.bitsPerByte)
+    ######################################
+    #       PADDING HANDLER METHODS
+    ######################################
+    # Gets the padding byte for the passed in block of data.
+    # Returns the byte in a bytes array if it's a pad byte, or -1 if it's not
+    # a padded block.
+    def GetPaddingByte(self, block_bytes):
+        # Get the last byte to compare to other bytes
+        padByte = block_bytes[len(block_bytes) - 1]
+        startIndex = len(block_bytes) - int(padByte)
 
-        # Transfer over bits to fill block
-        block.FromBits(input_bit_array.bits[index:index + self.expectedBlockLength])
+        # Verify all appropriate bytes are pad bytes
+        for x in block_bytes[startIndex:]:
+            if x != padByte:
+                return -1
 
-        # Pad if necessary
-        if paddingAmount > 0:
-            paddingBitArray = MyBitArray()
-            paddingBytes = bytearray()
-            paddingBytes.extend(paddingAmount for i in range(paddingAmount))
-            paddingBitArray.FromBytes(bytes(paddingAmount))
-            block.bits.extend(paddingBitArray.bits)
+        return padByte
 
-        return block
+    # Returns a fresh bit array that holds all unpadded bits. The padding is
+    # assumed to be PKCS #5.
+    def RemovePadding(self, padded_block_bit_array):
+        blockBytes = padded_block_bit_array.ToBytes()
 
+        # Search for existence of padding
+        padByte = self.GetPaddingByte(blockBytes)
+        if padByte != -1:
+            endIndex = len(blockBytes) - int(padByte)
+            unpaddedBytes = bytes(blockBytes[:endIndex])
+            unpaddedBits = MyBitArray()
+            unpaddedBits.FromBytes(unpaddedBytes)
+            return unpaddedBits
+        else:
+            originalBitArray = MyBitArray()
+            originalBitArray.extend(padded_block_bit_array)
+            return originalBitArray
+
+    ######################################
+    #       PERMUTATION/SBOX HANDLERS
+    ######################################
     # Process a given permutation on the passed bit array.
     # Assumes the permutation box is set up to indicate the index of the input
     # bit array to draw from for the result's bit.
@@ -272,6 +308,54 @@ class DES:
 
         return result
 
+    ######################################
+    #   INITIALIZATION VECTOR HANDLERS
+    ######################################
+    # Creates an initialization vector for use with some block cipher modes
+    # of operation. Not cryptographically secure, as it utilizes random.
+    # However, IV is publicly accessible, so it doesn't need to be
+    # cryptographically secure.
+    # Returns a bit array representing the initialization vector.
+    def CreateInitializationVector(self):
+        bitLength = 0
+        initializationVector = bytearray()
+
+        while bitLength < self.expectedBlockLength:
+            appendage = randint(0, 255)
+            initializationVector.append(appendage)
+            bitLength += appendage.bit_length()
+            if bitLength >= self.expectedBlockLength:
+                break
+
+        resultBitArray = MyBitArray()
+        resultBitArray.FromBytes(initializationVector)
+        # Truncate result to expectedBlockLength # of bits
+        resultBitArray.bits = resultBitArray.bits[:self.expectedBlockLength]
+
+        return resultBitArray
+
+    # Takes in an array of bytes and increments the last byte(s) by 1 as if
+    # conjoined.
+    # Returns a byte array of the incrementated initialization vector.
+    # If all bytes are at the maximum value, all bytes are set to 0.
+    def IncrementInitializationVector(self, IV_bit_array):
+        byteArray = bytearray(IV_bit_array.ToBytes())
+        for i in reversed(range(len(byteArray))):
+            try:
+                byteArray[i] += 1
+            except ValueError:
+                byteArray[i] = 0
+                continue
+            break
+
+        result = MyBitArray()
+        result.FromBytes(byteArray)
+
+        return result
+    
+    ######################################
+    #           FEISTEL HANDLERS
+    ######################################
     # Runs a Feistel function (the mangler function for DES) on the right half
     # of the input data message using the given subkey.
     # Returns the result of the Feistel/mangler function, which should be the
@@ -323,26 +407,6 @@ class DES:
 
         return subkey
     
-    # Splits bits evenly between a passed in list of bit arrays. The bit arrays
-    # must already be instantiated bit arrays. Consecutive bits stay consecutive.
-    # If unable to split evenly, the remainder of bits goes to the end of the
-    # last result array.
-    def SplitBitArray(self, input_bit_array, list_of_result_arrays):
-        # Guard condition
-        if(list_of_result_arrays == None or len(list_of_result_arrays) < 1):
-            return
-
-        # transfer the bits over
-        arrIndex = 0
-        nInArr = int(len(input_bit_array) / len(list_of_result_arrays))
-        for bit_array in list_of_result_arrays:
-            bit_array.extend(input_bit_array[arrIndex * nInArr : (arrIndex + 1) * nInArr])
-            arrIndex += 1
-
-        # transfer the remaining bits to the last array
-        if (arrIndex * nInArr) < len(input_bit_array):
-            list_of_result_arrays[len(list_of_result_arrays) - 1].expand(input_bit_array[arrIndex * nInArr:])
-
     # Runs a Feistel round (one of 16 in DES) using the given input data, the
     # pre-round key halves, the round number, and whether or not DES is being
     # run as an encryption or decryption.
@@ -421,39 +485,34 @@ class DES:
 
         return roundResult
 
-    # Gets the padding byte for the passed in block of data.
-    # Returns the byte in a bytes array if it's a pad byte, or -1 if it's not
-    # a padded block.
-    def GetPaddingByte(self, block_bytes):
-        # Get the last byte to compare to other bytes
-        padByte = block_bytes[len(block_bytes) - 1]
-        startIndex = len(block_bytes) - int(padByte)
+    ######################################
+    #       TOP LEVEL DES METHODS
+    ######################################
+    # Get a block of input data ready from the input bit array
+    # Pads with PKCS #5 if there are less bits than the expected block size
+    # Returns the expected input data block, properly padded if necessary,
+    # as a bit array.
+    def GetDESBlock(self, input_bit_array, index = 0):
+        block = MyBitArray()
+                        
+        # Determine if the bit array has enough bits left to form a full block
+        paddingAmount = 0
+        if index + self.expectedBlockLength > len(input_bit_array):
+            paddingAmount = int((index + self.expectedBlockLength - len(input_bit_array))/ self.bitsPerByte)
 
-        # Verify all appropriate bytes are pad bytes
-        for x in block_bytes[startIndex:]:
-            if x != padByte:
-                return -1
+        # Transfer over bits to fill block
+        block.FromBits(input_bit_array.bits[index:index + self.expectedBlockLength])
 
-        return padByte
+        # Pad if necessary
+        if paddingAmount > 0:
+            paddingBitArray = MyBitArray()
+            paddingBytes = bytearray()
+            paddingBytes.extend(paddingAmount for i in range(paddingAmount))
+            paddingBitArray.FromBytes(bytes(paddingAmount))
+            block.bits.extend(paddingBitArray.bits)
 
-    # Returns a fresh bit array that holds all unpadded bits. The padding is
-    # assumed to be PKCS #5.
-    def RemovePadding(self, padded_block_bit_array):
-        blockBytes = padded_block_bit_array.ToBytes()
-
-        # Search for existence of padding
-        padByte = self.GetPaddingByte(blockBytes)
-        if padByte != -1:
-            endIndex = len(blockBytes) - int(padByte)
-            unpaddedBytes = bytes(blockBytes[:endIndex])
-            unpaddedBits = MyBitArray()
-            unpaddedBits.FromBytes(unpaddedBytes)
-            return unpaddedBits
-        else:
-            originalBitArray = MyBitArray()
-            originalBitArray.extend(padded_block_bit_array)
-            return originalBitArray
-
+        return block
+    
     # Encrypts the input file using plain DES block cipher encryption.
     # Returns the last output block made by DES.
     def RunDESEncryption(self, input_bit_array, key_bit_array, output_file_handler, write_to_output_file = True):
@@ -489,8 +548,6 @@ class DES:
                 output_file_handler.write(roundInfo.DataOutput.ToBytes())
             lastOutputBlock = roundInfo.DataOutput
 
-        # ERROR TESTING
-        # reinstitute
         return lastOutputBlock
 
     # Decrypts the input file using plain DES block cipher decryption.
@@ -544,49 +601,10 @@ class DES:
             return self.RunDESEncryption(input_bit_array, key_bit_array, output_file_handler, write_to_output_file)
         else:
             return self.RunDESDecryption(input_bit_array, key_bit_array, output_file_handler, write_to_output_file, last_input_block)
-
-    # Creates an initialization vector for use with some block cipher modes
-    # of operation. Not cryptographically secure, as it utilizes random.
-    # However, IV is publicly accessible, so it doesn't need to be
-    # cryptographically secure.
-    # Returns a bit array representing the initialization vector.
-    def CreateInitializationVector(self):
-        bitLength = 0
-        initializationVector = bytearray()
-
-        while bitLength < self.expectedBlockLength:
-            appendage = randint(0, 255)
-            initializationVector.append(appendage)
-            bitLength += appendage.bit_length()
-            if bitLength >= self.expectedBlockLength:
-                break
-
-        resultBitArray = MyBitArray()
-        resultBitArray.FromBytes(initializationVector)
-        # Truncate result to expectedBlockLength # of bits
-        resultBitArray.bits = resultBitArray.bits[:self.expectedBlockLength]
-
-        return resultBitArray
-
-    # Takes in an array of bytes and increments the last byte(s) by 1 as if
-    # conjoined.
-    # Returns a byte array of the incrementated initialization vector.
-    # If all bytes are at the maximum value, all bytes are set to 0.
-    def IncrementInitializationVector(self, IV_bit_array):
-        byteArray = bytearray(IV_bit_array.ToBytes())
-        for i in reversed(range(len(byteArray))):
-            try:
-                byteArray[i] += 1
-            except ValueError:
-                byteArray[i] = 0
-                continue
-            break
-
-        result = MyBitArray()
-        result.FromBytes(byteArray)
-
-        return result
-
+    
+    ######################################
+    #       DECRYPTION KEY METHODS
+    ######################################
     # Runs through the DES encryption algorithm's key schedule to get the final key
     # for DES decryption.
     # Returns a FeistelRoundInfo object containing the final key halves and the
@@ -612,6 +630,9 @@ class DES:
         startup_info.KeyBitArray.extend(temp.KeyLeft)        
         startup_info.KeyBitArray.extend(temp.KeyRight)
 
+    ######################################
+    #   ENCRYPTION/DECRYPTION + MODES
+    ######################################
     # Runs an encryption or decryption of the startup info's input file data
     # in ECB (Electronic CodeBook) mode.
     def RunECBMode(self, startup_info):

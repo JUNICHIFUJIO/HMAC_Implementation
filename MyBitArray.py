@@ -22,7 +22,7 @@ class MyBitArray:
 
     # Converts an iterable of bytes to bits and stores them.
     def FromBytes(self, bytes_):
-        self.bits = [0] * (len(bytes_) * 8) # ERROR TESTING should make an array of 0s
+        self.bits = [0] * (len(bytes_) * 8)
                 
         bitIndex = 0
         for byte in bytes_:
