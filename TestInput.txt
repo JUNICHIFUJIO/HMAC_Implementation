@@ -1,1 +1,8 @@
-This is my input.
+Undertale is an awesome game. It's like Earthbound. This has been a test input message.
+
+Sincerely,
+Thomas Brown
+
+Homework Assignment #1: Data Encryption Standard Implementation
+S# 0821288
+10/18/2015

@@ -2,7 +2,8 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
 ######################################
 #            CLASS START
@@ -43,9 +44,12 @@ class MyBitArray:
         byteIndex = 0
         bitIndex = 0
         while (byteIndex * 8) < len(self):
-            theBits = self.bits[bitIndex : bitIndex + 8]
+            try:
+                theBits = self.bits[bitIndex : bitIndex + 8]
+            except IndexError:
+                theBits = self.bits[bitIndex :]
             result.append(0)
-            for i in range(8):
+            for i in range(len(theBits)):
                 result[byteIndex] = result[byteIndex] | (theBits[i] << (len(theBits) - 1 - i))
                 bitIndex += 1
             byteIndex += 1

@@ -1,5 +1,7 @@
 # Author: Thomas Brown
 # S# 0821288
+# 10/18/15
+# Homework Assignment 1: Data Encryption Standard with Modes of Operation
 # 
 # Description
 #	Creates a handler for simulating a Data Encryption Standard block cipher.
@@ -15,73 +17,45 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
-# imports
-import copy # for copying and deepcopying custom classes
-from hashlib import sha256
-from hashlib import hexdigest
-import random
+######################################
+#               IMPORTS
+######################################
+import copy                     # For copying and deepcopying custom classes
+from hashlib import sha256      # For key generation hashing algorithm
+from random import randint      # For initialization vector creation.
+                                # I decided on using random for IVs because they are
+                                # publicly accessible anyways, unlike the password
+                                # or the key.
 
-# Custom classe imports
-from DESModes import DESModes
+######################################
+#            CUSTOM IMPORTS
+######################################
+from DESModes import DESModes   # Defines the modes available for use with my
+                                # program.
 from FeistelRoundInfo import FeistelRoundInfo
+                                # Stores and manipulates data typically associated
+                                # with a DES Feistel round.
 from MyBitArray import MyBitArray
+                                # Custom class for managing bits. Didn't find
+                                # anything native to Python that could do so.
 from DESStartupInfo import DESStartupInfo
-from BinaryFileHandler import *
-from IVFileHandler import *
+                                # Stores and manipulates data typically needed
+                                # for the execution of my custom DES class.
+from BinaryFileHandler import * # Custom module handling the writing and reading
+                                # of data from binary files, as well as the easy
+                                # retrieval of file names, directories, and extensions.
+from IVFileHandler import *     # Custom module handling the writing and reading
+                                # of data from files storing initialization vectors
+                                # associated with an output file.
 
-# Main
-if __name__ == "__main__":
-    usageString = "Usage: Password Generation(genkey, password, outputFile); Encryption(encrypt, inputFile, keyFile, outputFile, mode); Decryption(decrypt, inputFile, keyFile, outputFile, mode);
-    if len(sys.argv) < 4 || len(sys.argv) > 6:
-        raise RuntimeError(usageString)
-        
-    if sys.argv[1] == "genkey":
-        if len(sys.argv) != 4:
-            raise RuntimeError("Usage: genkey password outputFile")
-        else:
-            des = DES()
-            password = sys.argv[2]
-            outputFileName = sys.argv[3]
-            des.GenKey(password, outputFileName)
-    else if sys.argv[1] == "encrypt":
-        if len(sys.argv) != 6:
-            raise RuntimeError("Usage: encrypt inputFile keyFile outputFile mode")
-        else:
-            des = DES()
-            inputFileName = sys.argv[2]
-            keyFileName = sys.argv[3]
-            outputFileName = sys.argv[4]
-            modeString = sys.argv[5]
-            startupInfo = DESStartupInfo.RetrieveDESStartupInfo(inputFileName, keyFileName, outputFileName, modeString, True)
-            # ERROR TESTING
-            # Use startupInfo, not the below implementation of Encrypt
-            # Also throw errors to mask the information given when trying to pass in data that doesn't have the right attributes (aka isn't a DESStartupInfo instantiation)
-            des.Encrypt(inputFileName, keyFileName, outputFileName, modeString)
-    else if sys.argv[1] == "decrypt":
-        if len(sys.argv) != 6:
-            raise RuntimeError("Usage: decrypt inputFile keyFile outputFile mode")
-        else:
-            des = DES()
-            inputFileName = sys.argv[2]
-            keyFileName = sys.argv[3]
-            outputFileName = sys.argv[4]
-            modeString = sys.argv[5]
-            startupInfo = DESStartInfo.RetrieveDESStartupInfo(inputFileName, keyFileName, outputFileName, modeString, False)
-            # ERROR TESTING
-            # see above error testing string
-            if startupInfo.ModeOfOperation == DESModes.counter:
-                # Note:
-                # CTR is odd in that it runs DES as an ENCRYPTION algorithm during
-                # its DECRYPTION phase. Therefore, a special exception is noted here
-                # for CTR mode.
-                des.Encrypt(startupInfo)
-            else:
-                des.Decrypt(startupInfo)
-
+######################################
+#            CLASS START
+######################################
 # Defines a class to encapsulate all logic involving DES and the modes of
-# operation required for Homework assignment #1 for CSS 527
+# operation required for Homework assignment #1 for CSS 527.
 class DES:
     ######################################
     #            CLASS FIELDS
@@ -142,7 +116,7 @@ class DES:
         51, 45, 33, 48, 44, 49, 39, 56,
         34, 53, 46, 42, 50, 36, 29, 32
         ]
-
+    # Defines # of shifts required each Feistel round.
     rotationSchedule = [
         1, 1, 2, 2,
         2, 2, 2, 2,
@@ -202,52 +176,30 @@ class DES:
         [7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8],
         [2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]
         ]
-
+    # Class fields representing constants
     expectedBlockLength = 64
     bitsPerByte = 8
     sBoxInputLength = 6
+    nRounds = 16
 
     ######################################
     #               METHODS
     ######################################
 
-    # Generate an encryption key, given a password.
-    # Utilizes the native sha256 hashing algorithm.
+    # Generate an encryption key, given a password. Utilizes the native sha256
+    # hashing algorithm. Writes the file to the same directory holding the
+    # top level executable script.
+    # Returns the name of the file holding the password hash.
     def GenKey(self, password, output_file_name):
-        # get the first 8 bytes (64 bits) of the hash and save it as the key
-        keyHash = hashlib.sha256(password.__str__().encode("utf-8")).digest()[:int(self.expectedBlockSize / self.bitsPerByte)]
+        # Repeatedly hashes the password passed in for extra security.
+        keyHash = sha256(password.__str__().encode("utf-8")).hexdigest()
+        for i in range(36171):
+            keyHash = sha256(keyHash.encode("utf-8")).hexdigest()
+        # Get the first 8 bytes (64 bits) of the hash and save it as the key.
+        keyHash = sha256(keyHash.encode("utf-8")).digest()[:int(self.expectedBlockLength / self.bitsPerByte)]
 
-        # write to binary file in the same directory as the top level script
-        WriteByteDataFile("EncryptionKey", keyHash)
-
-    # Assumes that the files are in the current working directory of the top
-    # level script.
-    def Encrypt(self, startup_info):
-        if startup_info.ModeOfOperation == DESModes.cipherBlockChain:
-            RunCBCMode(startup_info)
-        elif startup_info.ModeOfOperation == DESModes.counter:
-            RunCTRMode(startup_info)
-        elif startup_info.ModeOfOperation == DESModes.electronicCodebook:
-            RunECBMode(startup_info)
-        else:
-            raise ValueError("Invalid mode specified.")
-
-        # close all files that remain open in the start up info
-        startup_info.close()
-
-    # Assumes that the files are in the current working directory of the top
-    # level script.
-    def Decrypt(self, startup_info):
-        if startup_info.IsEncryption != False:
-            raise ValueError("Decrypt method inappropriately called.")
-
-        # Alter the key if decryption is requested
-        if startup_info.IsEncryption == False:
-            # have to push key forward as if it went through 16 feistel rounds
-            SetKeyToDecryptionKey(startup_info)
-
-        Encrypt(startup_info)
-        
+        # Write to binary file in the same directory as the top level script
+        return WriteByteDataFile("EncryptionKey", keyHash)
 
     # Get a block of input data ready from the input bit array
     # Pads with PKCS #5 if there are less bits than the expected block size
@@ -256,19 +208,19 @@ class DES:
     def GetDESBlock(self, input_bit_array, index = 0):
         block = MyBitArray()
                         
-        # determine if the bit array has enough bits left to form a full block
+        # Determine if the bit array has enough bits left to form a full block
         paddingAmount = 0
         if index + self.expectedBlockLength > len(input_bit_array):
-            # need to pad a certain amount
-            paddingAmount = index + self.expectedBlockLength - len(input_bit_array)
+            paddingAmount = int((index + self.expectedBlockLength - len(input_bit_array))/ self.bitsPerByte)
 
-        # transfer over bits to fill block
+        # Transfer over bits to fill block
         block.FromBits(input_bit_array.bits[index:index + self.expectedBlockLength])
 
+        # Pad if necessary
         if paddingAmount > 0:
             paddingBitArray = MyBitArray()
-            paddingBytes = bytes(paddingAmount)
-            paddingBytes.extend(bytes(paddingAmount.__str__().encode("utf-8")) for i in range(paddingAmount))
+            paddingBytes = bytearray()
+            paddingBytes.extend(paddingAmount for i in range(paddingAmount))
             paddingBitArray.FromBytes(bytes(paddingAmount))
             block.bits.extend(paddingBitArray.bits)
 
@@ -276,44 +228,57 @@ class DES:
 
     # Process a given permutation on the passed bit array.
     # Assumes the permutation box is set up to indicate the index of the input
-    # bit array that will become that slot's value.
+    # bit array to draw from for the result's bit.
+    # If is_reversed argument is true, reverses the process of permutation on
+    # a given result bit array.
     # Returns the resulting permutation in a bit array format.
-    def ProcessPermutation(self, bit_array, permutation_box):
-        # make resulting bit array                                   
+    def ProcessPermutation(self, bit_array, permutation_box, is_reversed = False):
+        # Make resulting bit array                                   
         result = MyBitArray()
 
-        # process the permutation
-        for x in permutation_box:
-            result.append(bit_array[x])
-                                   
+        # Process the permutation
+        if is_reversed == False:
+            for x in permutation_box:
+                result.append(bit_array[x - 1])
+        else:
+            # Reverse the permutation
+            result.bits = [0] * len(bit_array)
+            for i in range(len(permutation_box)):
+                result[permutation_box[i] - 1] = bit_array[i]
+            
         return result
 
     # Process a given DES S-Box on the passed bit array.
-    # Returns the 4 bit output of the S-Box processing
+    # Returns the 4 bit output of the S-Box processing in a bit array format.
     def ProcessSBox(self, input_bit_array, s_box):
         if len(input_bit_array) != self.sBoxInputLength:
             raise ValueError("Passed bit array was not the correct length.")
         result = MyBitArray()
 
-        # calculate row # of table
+        # Calculate row # of table
         row = input_bit_array[0]
         row = row << 1
         row = row ^ input_bit_array[len(input_bit_array) - 1]
-        # calculate column # of table
-        column = input_bit_array[1:len(input_bit_array) - 1]
+        # Calculate column # of table
+        columnBits = input_bit_array[1:len(input_bit_array) - 1]
+        column = columnBits[0]
+        for i in range(1, len(columnBits)):
+            column = column << 1
+            column ^= columnBits[i]
 
+        # Convert result into bit array format
         resultBytes = bytes([s_box[row][column]])
         result.FromBytes(resultBytes)
 
         return result
 
     # Runs a Feistel function (the mangler function for DES) on the right half
-    # of the input data message using the given subkey
+    # of the input data message using the given subkey.
     # Returns the result of the Feistel/mangler function, which should be the
     # Mr at the end of the Feistel round.
     def FeistelFunction(self, data_input_right_half, subkey):
         # E box (Expansion)
-        expandedData = ProcessPermutation(data_input_right_half, expansionBox)
+        expandedData = self.ProcessPermutation(data_input_right_half, self.expansionBox)
                 
         # XOR Mr with round's subkey
         sBoxInput = expandedData ^ subkey
@@ -323,50 +288,55 @@ class DES:
         sBoxes = [self.sBox1, self.sBox2, self.sBox3, self.sBox4, self.sBox5, self.sBox6, self.sBox7, self.sBox8]
         for i in range(len(sBoxes)):
             index = i * self.sBoxInputLength
-            sBoxOutput = ProcessSBox(sBoxInput[index : index + sBoxInputLength])
+            sBoxOutput = self.ProcessSBox(sBoxInput[index : index + self.sBoxInputLength], sBoxes[i])
             joinedSBoxOutput.extend(sBoxOutput)
                 
         # Permute result
-        result = ProcessPermutation(joinedSBoxOutput, permutationBox)
+        result = self.ProcessPermutation(joinedSBoxOutput, self.permutationBox)
 
         return result
 
-    # Rotates the halves of the key in the given feistel round info object.
+    # Rotates the halves of the key in the given feistel round info object
+    # in-place. Assumes the feistel_round_info parameter represents a FeistelRoundInfo
+    # object and that the appropriate field is available/mutable.
     def RotateKeyHalves(self, feistel_round_info, is_encryption):
         feistel_round_info.RotateKeyHalves(self.rotationSchedule[feistel_round_info.RoundNumber], is_encryption)
 
-    # Processes DES key schedule for the round.
-    # Returns the subkey for the round
+    # Generates subkey and shifts recorded key halves in-place depending upon
+    # whether encryption or decryption is requested.
+    # Returns the generated subkey for the round.
     def ProcessKeySchedule(self, feistel_round_info, is_encryption):
         if len(feistel_round_info.KeyLeft) != 28 or len(feistel_round_info.KeyRight) != 28:
             raise ValueError("Inappropriate key encountered when processing key schedule.")
 
         if is_encryption == True:
-            RotateKeyHalves(feistel_round_info, is_encryption)
+            self.RotateKeyHalves(feistel_round_info, is_encryption)
 
         # Get the subkey    
         preSubkey = MyBitArray()
         preSubkey.extend(feistel_round_info.KeyLeft)
         preSubkey.extend(feistel_round_info.KeyRight)
-        subkey = ProcessPermutation(preSubkey, pc2Box)
-        
+        subkey = self.ProcessPermutation(preSubkey, self.pc2Box)
+
         if is_encryption == False:
-            RotateKeyHalves(feistel_round_info, is_encryption)
+            self.RotateKeyHalves(feistel_round_info, is_encryption)
 
         return subkey
     
-    # Splits bits between a list of input list of bit arrays. Consecutive bits stay consecutive.
-    # If unable to split evenly, the remainder of bits goes to the end of the last result array.
-    def SplitBitArray(input_bit_array, list_of_result_arrays):
+    # Splits bits evenly between a passed in list of bit arrays. The bit arrays
+    # must already be instantiated bit arrays. Consecutive bits stay consecutive.
+    # If unable to split evenly, the remainder of bits goes to the end of the
+    # last result array.
+    def SplitBitArray(self, input_bit_array, list_of_result_arrays):
         # Guard condition
-        if(list_of_result_arrays == None || len(list_of_result_arrays) < 1):
+        if(list_of_result_arrays == None or len(list_of_result_arrays) < 1):
             return
 
         # transfer the bits over
         arrIndex = 0
         nInArr = int(len(input_bit_array) / len(list_of_result_arrays))
         for bit_array in list_of_result_arrays:
-            bit_array.expand(input_bit_array[arrIndex * nInArr : (arrIndex + 1) * nInArr])
+            bit_array.extend(input_bit_array[arrIndex * nInArr : (arrIndex + 1) * nInArr])
             arrIndex += 1
 
         # transfer the remaining bits to the last array
@@ -374,17 +344,16 @@ class DES:
             list_of_result_arrays[len(list_of_result_arrays) - 1].expand(input_bit_array[arrIndex * nInArr:])
 
     # Runs a Feistel round (one of 16 in DES) using the given input data, the
-    # pre-round key, the round number, and whether or not DES is being run as an
-    # encryption or decryption.
-    # Returns the resulting text of the Feistel round.
+    # pre-round key halves, the round number, and whether or not DES is being
+    # run as an encryption or decryption.
+    # Returns a FeistelRoundInfo object defining the attributes of the round processed.
     def ProcessFeistelRound(self, input_block_bit_array, key_left_bit_array, key_right_bit_array, round_number, is_encryption):
-        # requires a 64 bit input. if not 64 bits, throw an error # ERROR TESTING NEED TO IMPLEMENT
-        try:
-            if len(data_input) != 64 || len(key_left) != 28 || len(key_right) != 28:
-                raise ValueError("ProcessFeistelRound received data or keys of an inappropriate length.")
+        # Requires a 64 bit input
+        if len(input_block_bit_array) != 64 or len(key_left_bit_array) != 28 or len(key_right_bit_array) != 28:
+            raise ValueError("ProcessFeistelRound received data or keys of an inappropriate length.")
 
-        # create result FeistelRoundInfo
-        roundResult = FeistelRoundInfo()
+        # Create result FeistelRoundInfo
+        roundResult = FeistelRoundInfo(0)
         roundResult.RoundNumber = round_number
         roundResult.DataInput = input_block_bit_array
         roundResult.DataOutput = MyBitArray()
@@ -393,25 +362,63 @@ class DES:
         roundResult.KeyRight = MyBitArray()
         roundResult.KeyRight.extend(key_right_bit_array)
 
-        # split the data into two halves, call them Ml and Mr
+        # Split the data into two halves, call them Ml and Mr
         Ml = MyBitArray()
         Mr = MyBitArray()
-        SplitBitArray(roundResult.DataInput, [Ml, Mr])
+        self.SplitBitArray(roundResult.DataInput, [Ml, Mr])
 
-        # generate the subkey for the round
-        subkey = ProcessKeySchedule(roundResult, is_encryption)
-
+        # Generate the subkey for the round
+        subkey = self.ProcessKeySchedule(roundResult, is_encryption)
+        
         # Process Feistel Function
-        mangledMr = FeistelFunction(Mr, subkey)
-
+        mangledMr = self.FeistelFunction(Mr, subkey)
+        
         # XOR with Ml
         newMr = mangledMr ^ Ml
 
         # Concatenate XOR result with original Mr
-        roundResult.dataOutput.extend(Mr)
-        roundResult.dataOutput.extend(newMr)
-                
-        # returns the output of the round
+        roundResult.DataOutput.extend(Mr)
+        roundResult.DataOutput.extend(newMr)
+        
+        return roundResult
+
+    # Runs a reversed Feistel round (one of 16 in DES decryption) that reconstructs
+    # the appropriate input message for the parallel encryption round.
+    # Returns a FeistelRoundInfo object defining the attributes of the round processed.
+    def ProcessReverseFeistelRound(self, input_block_bit_array, key_left_bit_array, key_right_bit_array, round_number):
+        isEncryption = False
+
+        # Create result FeistelRoundInfo
+        roundResult = FeistelRoundInfo(0)
+        roundResult.RoundNumber = round_number
+        roundResult.DataInput = input_block_bit_array
+        roundResult.DataOutput = MyBitArray()
+        roundResult.KeyLeft = MyBitArray()
+        roundResult.KeyLeft.extend(key_left_bit_array)
+        roundResult.KeyRight = MyBitArray()
+        roundResult.KeyRight.extend(key_right_bit_array)
+
+        # Assign names to the halves of the data input for easy conceptualization
+        # of reorganization
+        originalMr = MyBitArray() # refers to original encryption Mr for the round
+        newMr = MyBitArray()      # refers to the mangled original encryption Mr
+                                  # XOR'd with the original encryption Ml
+        self.SplitBitArray(roundResult.DataInput, [originalMr, newMr])
+
+        # Generate the subkey for the round
+        subkey = self.ProcessKeySchedule(roundResult, isEncryption)
+
+        # Process Feistel Function
+        mangledMr = self.FeistelFunction(originalMr, subkey)
+
+        # Create the original Ml
+        originalMl = newMr ^ mangledMr
+
+        # Reconstruct the input of the parallel encryption round
+        roundResult.DataOutput = MyBitArray()
+        roundResult.DataOutput.FromBits(originalMl.bits)
+        roundResult.DataOutput.extend(originalMr)
+
         return roundResult
 
     # Gets the padding byte for the passed in block of data.
@@ -422,6 +429,7 @@ class DES:
         padByte = block_bytes[len(block_bytes) - 1]
         startIndex = len(block_bytes) - int(padByte)
 
+        # Verify all appropriate bytes are pad bytes
         for x in block_bytes[startIndex:]:
             if x != padByte:
                 return -1
@@ -434,7 +442,7 @@ class DES:
         blockBytes = padded_block_bit_array.ToBytes()
 
         # Search for existence of padding
-        padByte = GetPaddingByte(blockBytes)
+        padByte = self.GetPaddingByte(blockBytes)
         if padByte != -1:
             endIndex = len(blockBytes) - int(padByte)
             unpaddedBytes = bytes(blockBytes[:endIndex])
@@ -448,80 +456,125 @@ class DES:
 
     # Encrypts the input file using plain DES block cipher encryption.
     # Returns the last output block made by DES.
-    def RunDES(self, input_bit_array, key_bit_array, output_file_handler, write_to_output_file = True):
-        if is_encryption == True:
-            # Run the PC1 permutation on the key to select 56 bits of the 64 bits of the key
-            permutedKey = ProcessPermutation(key_bit_array, self.initialPermutationBox)
-        else:
-            permutedKey = key_bit_array
+    def RunDESEncryption(self, input_bit_array, key_bit_array, output_file_handler, write_to_output_file = True):
+        isEncryption = True
+        roundInfo = FeistelRoundInfo(0)
+        # Run the PC1 permutation on the key to select 56 bits of the 64 bits of the key
+        roundInfo.KeyLeft = self.ProcessPermutation(key_bit_array, self.pc1BoxLeft)
+        roundInfo.KeyRight = self.ProcessPermutation(key_bit_array, self.pc1BoxRight)
 
         # Run the Feistel rounds
         inputIndex = 0
         while inputIndex < len(input_bit_array):
-            # Split the permuted key
-            roundInfo = FeistelRoundInfo()
-            roundInfo.KeyLeft = MyBitArray()
-            roundInfo.KeyRight = MyBitArray()
-            SplitBitArray(permutedKey, [roundInfo.KeyLeft, roundInfo.KeyRight])
-
             # Get the DES input of the appropriate length
-            roundInfo.InputData = GetDESBlock(input_bit_array, inputIndex)
+            roundInfo.DataInput = self.GetDESBlock(input_bit_array, inputIndex)
             inputIndex += self.expectedBlockLength
 
             # Run the initial permutation on the data
-            permutedInputBitArray = ProcessPermutation(input_bit_array, self.initialPermutationBox)
+            permutedInputBitArray = self.ProcessPermutation(roundInfo.DataInput, self.initialPermutationBox)
+            roundInfo.DataInput = permutedInputBitArray
 
             # Run 16 Feistel rounds
-            for i in range(16):
+            for i in range(self.nRounds):                      
                 if i > 0:
-                    roundInfo.InputData = roundInfo.OutputData
-                if is_encryption == True:
-                    roundInfo.RoundNumber = i
-                else:
-                    roundInfo.RoundNumber = 16 - 1 - i
-                roundInfo.OutputData = ProcessFeistelRound(roundInfo.InputData, roundInfo.KeyLeft, roundInfo.KeyRight, roundInfo.RoundNumber, True)
+                    roundInfo.DataInput = roundInfo.DataOutput
+                roundInfo.RoundNumber = i
+                roundInfo = self.ProcessFeistelRound(roundInfo.DataInput, roundInfo.KeyLeft, roundInfo.KeyRight, roundInfo.RoundNumber, isEncryption)
 
             # Run the final permutation of the data
-            roundInfo.OutputData = ProcessPermutation(roundInfo.OutputData, self.finalPermutationBox)
-
-            # If decrypting and this is the last block of data search for and remove padding
-            if is_encryption == False and inputIndex >= len(input_bit_array):
-                roundInfo.OutputData = RemovePadding(roundInfo.OutputData)
+            roundInfo.DataOutput = self.ProcessPermutation(roundInfo.DataOutput, self.finalPermutationBox)
 
             # Append to output file if appropriate
             if write_to_output_file == True:
-                output_file_handler.write(roundInfo.OutputData.ToBytes())
-            lastOutputBlock = roundInfo.OutputData
+                output_file_handler.write(roundInfo.DataOutput.ToBytes())
+            lastOutputBlock = roundInfo.DataOutput
+
+        # ERROR TESTING
+        # reinstitute
+        return lastOutputBlock
+
+    # Decrypts the input file using plain DES block cipher decryption.
+    # Returns the last output block made by DES.
+    def RunDESDecryption(self, input_bit_array, key_bit_array, output_file_handler, write_to_output_file = True, last_input_block = False):
+        roundInfo = FeistelRoundInfo(0)
+        roundInfo.KeyLeft = MyBitArray()
+        roundInfo.KeyRight = MyBitArray()
+        self.SplitBitArray(key_bit_array, [roundInfo.KeyLeft, roundInfo.KeyRight])
+
+        # Run the Feistel rounds
+        inputIndex = 0
+        while inputIndex < len(input_bit_array):
+            # Get the DES input of the appropriate length
+            roundInfo.DataInput = self.GetDESBlock(input_bit_array, inputIndex)
+            inputIndex += self.expectedBlockLength
+
+            # Run the reverse of the final permutation on the data
+            permutedInputBitArray = self.ProcessPermutation(roundInfo.DataInput, self.finalPermutationBox, True)
+            roundInfo.DataInput = permutedInputBitArray
+
+            # Run 16 Feistel rounds
+            for i in range(self.nRounds):
+                # Set feistel round info correctly
+                if i > 0:
+                    roundInfo.DataInput = roundInfo.DataOutput
+                roundInfo.RoundNumber = self.nRounds - i - 1
+
+                roundInfo = self.ProcessReverseFeistelRound(roundInfo.DataInput, roundInfo.KeyLeft, roundInfo.KeyRight, roundInfo.RoundNumber)
+
+            # Run the reverse of the initial permutation of the data
+            roundInfo.DataOutput = self.ProcessPermutation(roundInfo.DataOutput, self.initialPermutationBox, True)
+
+            # If decrypting and this is the last block of data to decrypt,
+            # search for and remove padding bytes at the end of the message.
+            if last_input_block == True or (len(input_bit_array) > self.expectedBlockLength and inputIndex >= len(input_bit_array)):
+                roundInfo.DataOutput = self.RemovePadding(roundInfo.DataOutput)
+
+            # Append to output file if appropriate
+            if write_to_output_file == True:
+                output_file_handler.write(roundInfo.DataOutput.ToBytes())
+            lastOutputBlock = roundInfo.DataOutput
 
         return lastOutputBlock
 
+    # Runs DES in either encryption or decryption mode.
+    # Returns the results of running DES, which is currently the last output
+    # block done by the encryption/decryption algorithm.
+    def RunDES(self, input_bit_array, key_bit_array, output_file_handler, is_encryption, write_to_output_file = True, last_input_block = False):
+        if is_encryption == True:
+            return self.RunDESEncryption(input_bit_array, key_bit_array, output_file_handler, write_to_output_file)
+        else:
+            return self.RunDESDecryption(input_bit_array, key_bit_array, output_file_handler, write_to_output_file, last_input_block)
+
     # Creates an initialization vector for use with some block cipher modes
-    # of operation.
-    # Returns a bit array representing the initialization vector
+    # of operation. Not cryptographically secure, as it utilizes random.
+    # However, IV is publicly accessible, so it doesn't need to be
+    # cryptographically secure.
+    # Returns a bit array representing the initialization vector.
     def CreateInitializationVector(self):
         bitLength = 0
         initializationVector = bytearray()
 
-        while bitLength < expectedBlockLength:
-            appendage = random.randint(0, 255)
+        while bitLength < self.expectedBlockLength:
+            appendage = randint(0, 255)
             initializationVector.append(appendage)
             bitLength += appendage.bit_length()
-            if bitLength >= expectedBlockLength:
+            if bitLength >= self.expectedBlockLength:
                 break
 
         resultBitArray = MyBitArray()
         resultBitArray.FromBytes(initializationVector)
-        # truncate result to expectedBlockSize bits
-        resultBitArray.bits = resultBitArray.bits[:self.expectedBlockSize]
+        # Truncate result to expectedBlockLength # of bits
+        resultBitArray.bits = resultBitArray.bits[:self.expectedBlockLength]
 
         return resultBitArray
 
-    # Takes in an array of bytes and increments the last byte by 1 as if conjoined.
+    # Takes in an array of bytes and increments the last byte(s) by 1 as if
+    # conjoined.
     # Returns a byte array of the incrementated initialization vector.
     # If all bytes are at the maximum value, all bytes are set to 0.
     def IncrementInitializationVector(self, IV_bit_array):
         byteArray = bytearray(IV_bit_array.ToBytes())
-        for i in reversed(range(len(result))):
+        for i in reversed(range(len(byteArray))):
             try:
                 byteArray[i] += 1
             except ValueError:
@@ -534,52 +587,63 @@ class DES:
 
         return result
 
-    # Runs through an encryption algorithm's key schedule to get the final key
-    # for decryption
-    # Returns a FeistelRoundInfo object containing only the final key halves.
+    # Runs through the DES encryption algorithm's key schedule to get the final key
+    # for DES decryption.
+    # Returns a FeistelRoundInfo object containing the final key halves and the
+    # elapsed # of rounds.
     def GetDESDecryptionKey(self, encryption_key):
-        temp = FeistelRoundInfo()
-        temp.KeyLeft = MyBitArray()
-        temp.KeyRight = MyBitArray()
-        SplitBitArray(encryption_key, [temp.KeyLeft, temp.KeyRight])
+        temp = FeistelRoundInfo(0)
+        temp.KeyLeft = self.ProcessPermutation(encryption_key, self.pc1BoxLeft)
+        temp.KeyRight = self.ProcessPermutation(encryption_key, self.pc1BoxRight)
 
         # Run it through 16 Feistel rounds
-        for i in range(16):
+        for i in range(self.nRounds):
             temp.RoundNumber = i
-            RotateKeyHalves(temp, True)
+            self.RotateKeyHalves(temp, True)
 
         return temp
 
-    # Sets the passed in startup info's key to be the proper DES decryption key
+    # Sets the passed in startup info's key to be the proper DES decryption key.
+    # Assumes startup_info is an instance of the DESStartupInfo class, and that
+    # the appropriate field is available/mutable.
     def SetKeyToDecryptionKey(self, startup_info):
-        temp = GetDESDecryptionKey(startup_info.KeyBitArray)
+        temp = self.GetDESDecryptionKey(startup_info.KeyBitArray)
         startup_info.KeyBitArray = MyBitArray()
-        startup_info.extend(temp.KeyLeft)
-        startup_info.extend(temp.KeyRight)
+        startup_info.KeyBitArray.extend(temp.KeyLeft)        
+        startup_info.KeyBitArray.extend(temp.KeyRight)
 
     # Runs an encryption or decryption of the startup info's input file data
-    # in ECB mode.
+    # in ECB (Electronic CodeBook) mode.
     def RunECBMode(self, startup_info):
-        RunDES(startup_info.InputBitArray, startup_info.KeyBitArray, startup_info.OutputFileHandler, startup_info.IsEncryption)
+        self.RunDES(startup_info.InputBitArray, startup_info.KeyBitArray, startup_info.OutputFileHandler, startup_info.IsEncryption)
 
     # Runs an encryption or decryption of the startup info's input file data in
-    # CBC mode.
+    # CBC mode. (Cipher Block Chaining)
     def RunCBCMode(self, startup_info):
         if startup_info.IsEncryption == True:
-            IV = CreateInitializationVector()
+            IV = self.CreateInitializationVector()
         else:
-            IV = ExtractIV(ReadIVFile(open(startup_info.InputFilePath), "rb"))
+            IV = ExtractIV(ReadIVFile(open(startup_info.InputFilePath, "rb")))
         mask = IV
 
         index = 0
-        while index < len(startup_info.InputBitArray)
-            DESInput = GetDESBlock(startup_info.InputBitArray, index)
-        
+        while index < len(startup_info.InputBitArray):
+            DESInput = self.GetDESBlock(startup_info.InputBitArray, index)
+            index += self.expectedBlockLength
+            
             if startup_info.IsEncryption == True:
                 DESInput = DESInput ^ mask
 
-            DESOutput = RunDES(DESInput, startup_info.KeyBitArray, startup_info.OutputFileHandler, startup_info.IsEncryption, False)
+            # Determine if you need to watch out for padding bytes
+            if index >= len(startup_info.InputBitArray):
+                isLastInputBlock = True
+            else:
+                isLastInputBlock = False
 
+            # Run the DES block cipher
+            DESOutput = self.RunDES(DESInput, startup_info.KeyBitArray, startup_info.OutputFileHandler, startup_info.IsEncryption, False, isLastInputBlock)
+
+            # Update bit mask and cipher/plain text
             if startup_info.IsEncryption == True:
                 text = DESOutput
                 mask = text
@@ -588,36 +652,136 @@ class DES:
                 mask = DESInput
             startup_info.OutputFileHandler.write(text.ToBytes())
 
-            index += self.expectedBlockLength
-
-            # ERROR TESTING how to account for potential streams of bytes where it appears to be padding but is not
-            # Could implement something in DES to handle manual ignorance of padding removal
-
         # Write the encryption IV to a file
         if startup_info.IsEncryption == True:
-            WriteIVFile(IV, startup_info.outputFileHandler)
-            
+            WriteIVFile(IV, startup_info.OutputFileHandler)
 
     # Runs an encryption or decryption of the startup info's input file data in
-    # CTR mode.
+    # CTR mode. (CounTeR)
     def RunCTRMode(self, startup_info):
         if startup_info.IsEncryption == True:
-            IV = CreateInitializationVector()
+            IV = self.CreateInitializationVector()
         else:
-            IV = ExtractIV(ReadIVFile(open(startup_info.InputFilePath), "rb"))
+            IV = ExtractIV(ReadIVFile(open(startup_info.InputFilePath, "rb")))
         DESInput = IV
         index = 0
         while index < len(startup_info.InputBitArray):
             if index > 0:
-                DESInput = IncrementInitializationVector(IV)
+                DESInput = self.IncrementInitializationVector(IV)
 
-            DESOutput = RunDES(DESInput, startup_info.KeyBitArray, startup_info.OutputFileHandler, True, False)
+            isLastInputBlock = False
+            
+            DESOutput = self.RunDES(DESInput, startup_info.KeyBitArray, startup_info.OutputFileHandler, True, False, isLastInputBlock)
 
-            text = GetDESBlock(startup_info.InputBitArray, index) ^ DESOutput
+            text = self.GetDESBlock(startup_info.InputBitArray, index) ^ DESOutput
+
             index += self.expectedBlockLength
 
-            startup_info.OutputFileHandler.write(text)
+            # Determine if you need to watch out for padding bytes
+            if index >= len(startup_info.InputBitArray):
+                isLastInputBlock = True
+            else:
+                isLastInputBlock = False
+                
+            if isLastInputBlock == True and startup_info.IsEncryption == False:
+                text = self.RemovePadding(text)
+
+            startup_info.OutputFileHandler.write(text.ToBytes())
 
         # Write the encryption IV to a file
         if startup_info.IsEncryption == True:
-            WriteIVFile(IV, startup_info.outputFileHandler)
+            WriteIVFile(IV, startup_info.OutputFileHandler)
+
+    # Encrypts a file in the startup_info's mode of operation.
+    # Assumes that the files are in the current working directory of the top
+    # level script.
+    def Encrypt(self, startup_info):
+        if startup_info.ModeOfOperation == DESModes.cipherBlockChain:
+            self.RunCBCMode(startup_info)
+        elif startup_info.ModeOfOperation == DESModes.counter:
+            self.RunCTRMode(startup_info)
+        elif startup_info.ModeOfOperation == DESModes.electronicCodebook:
+            self.RunECBMode(startup_info)
+        else:
+            raise ValueError("Invalid mode specified.")
+
+        # Close all files that remain open in the start up info
+        startup_info.close()
+
+    # Decrypts a file in the startup_info's mode of operation.
+    # Adds some logic to, and then runs, the Encrypt method.
+    # Assumes that the files are in the current working directory of the top
+    # level script.
+    def Decrypt(self, startup_info):
+        if startup_info.ModeOfOperation == DESModes.counter:
+            self.Encrypt(startup_info)
+            return
+        
+        if startup_info.IsEncryption != False:
+            raise ValueError("Decrypt method inappropriately called.")
+
+        # Alter the key to the proper DES decryption key
+        self.SetKeyToDecryptionKey(startup_info)
+
+        # Run the Encrypt logic with the decryption key
+        self.Encrypt(startup_info)
+        
+
+######################################
+#               MAIN
+######################################
+if __name__ == "__main__":
+    usageString = "Usage: Password Generation(genkey, password, outputFile); Encryption(encrypt, inputFile, keyFile, outputFile, mode); Decryption(decrypt, inputFile, keyFile, outputFile, mode)";
+    print()
+    print("Running Main for BrownThomasDES module.")
+    
+    if len(sys.argv) < 4 or len(sys.argv) > 6:
+        raise RuntimeError(usageString)
+        
+    if sys.argv[1].lower() == "genkey":
+        if len(sys.argv) != 4:
+            raise RuntimeError("Usage: genkey password outputFile")
+        else:
+            des = DES()
+            password = sys.argv[2]
+            outputFileName = sys.argv[3]
+            # Ensures .txt extension exists on file name
+            if len(outputFileName.split(".")) < 2:
+                outputFileName += ".txt"
+            print("Encryption key stored in " + des.GenKey(password, outputFileName))
+    elif sys.argv[1].lower() == "encrypt":
+        if len(sys.argv) != 6:
+            raise RuntimeError("Usage: encrypt inputFile keyFile outputFile mode")
+        else:
+            des = DES()
+            inputFileName = sys.argv[2]
+            keyFileName = sys.argv[3]
+            outputFileName = sys.argv[4]
+            # Ensures .txt extension exists on file names
+            if len(inputFileName.split(".")) < 2:
+                inputFileName += ".txt"
+            if len(keyFileName.split(".")) < 2:
+                keyFileName += ".txt"
+            if len(outputFileName.split(".")) < 2:
+                outputFileName += ".txt"
+            modeString = sys.argv[5]
+            startupInfo = DESStartupInfo.RetrieveDESStartupInfo(inputFileName, keyFileName, outputFileName, modeString, True)
+            des.Encrypt(startupInfo)
+    elif sys.argv[1].lower() == "decrypt":
+        if len(sys.argv) != 6:
+            raise RuntimeError("Usage: decrypt inputFile keyFile outputFile mode")
+        else:
+            des = DES()
+            inputFileName = sys.argv[2]
+            keyFileName = sys.argv[3]
+            outputFileName = sys.argv[4]
+            # Ensures .txt extension exists on file names
+            if len(inputFileName.split(".")) < 2:
+                inputFileName += ".txt"
+            if len(keyFileName.split(".")) < 2:
+                keyFileName += ".txt"
+            if len(outputFileName.split(".")) < 2:
+                outputFileName += ".txt"
+            modeString = sys.argv[5]
+            startupInfo = DESStartupInfo.RetrieveDESStartupInfo(inputFileName, keyFileName, outputFileName, modeString, False)
+            des.Decrypt(startupInfo)

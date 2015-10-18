@@ -2,7 +2,8 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
 ######################################
 #            IMPORTS
@@ -37,7 +38,7 @@ class DESStartupInfo:
         startupInfo = DESStartupInfo()
 
         # Store the input file name for potential later use
-        startupInfo.InputFilePath = GetScriptDirectory() + "\\" + GetFileNameWithExtension(input_file_name)
+        startupInfo.InputFilePath = os.path.join(GetScriptDirectory(), GetFileNameWithExtension(input_file_name))
 
         # Get the input bits from the input file name
         startupInfo.InputBitArray = MyBitArray()
@@ -48,7 +49,7 @@ class DESStartupInfo:
         startupInfo.KeyBitArray.FromBytes(ReadByteDataFile(key_file_name))
 
         # Open an output file handler
-        outputFileName = GetScriptDirectory() + output_file_name
+        outputFileName = os.path.join(GetScriptDirectory(), output_file_name)
         # Append file extension if necessary
         if len(outputFileName.split(".")) < 2:
             outputFileName += ".txt"
@@ -96,3 +97,11 @@ if __name__ == "__main__":
     print(startup_info.ModeOfOperation)
     print("And the recorded state is encryption...?")
     print(startup_info.IsEncryption)
+    print("Testing close functions.")
+    startup_info.close()
+    print("Output file is still open...")
+    try:
+        startup_info.OutputFileHandler.write(bytes([1, 2, 3]))
+        print("True.")
+    except ValueError:
+        print("False.")

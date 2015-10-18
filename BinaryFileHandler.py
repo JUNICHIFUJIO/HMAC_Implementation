@@ -2,7 +2,8 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
 ######################################
 #            METHODS START

@@ -2,7 +2,8 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
 ######################################
 #            IMPORTS
@@ -33,9 +34,10 @@ class DESModes(Enum):
             return DESModes.cipherBlockChain
         elif mode_string.upper() == "CTR" or mode_string.lower() == "counter":
             return DESModes.counter
-        elif mode_string.upper() == "EBC" or mode_string.lower() == "electroniccodebook" or mode_string.lower() == "electronic codebook":
+        elif mode_string.upper() == "ECB" or mode_string.lower() == "electroniccodebook" or mode_string.lower() == "electronic codebook":
             return DESModes.electronicCodebook
         else:
+            print(mode_string)
             raise ValueError("Inappropriate mode selected. Please choose between ECB, CBC, or CTR.")
         
 ######################################

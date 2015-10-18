@@ -2,7 +2,8 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
+if sys.path[0] != os.path.dirname(os.path.realpath(sys.argv[0])):
+    sys.path.insert(0, os.path.dirname(os.path.realpath(sys.argv[0])))
 
 ######################################
 #               IMPORTS
@@ -31,7 +32,7 @@ def WriteIVFile(IV_bit_array, output_file_handler):
 def ReadIVFile(ciphertext_file_handler):
     # Find the IVFile
     IVFileName = os.path.join(GetScriptDirectory(), GetFileName(ciphertext_file_handler.name)) + "_IV.txt"
-
+    
     return ReadByteDataFile(IVFileName)
 
 # Extracts the IV from a stream of bytes
