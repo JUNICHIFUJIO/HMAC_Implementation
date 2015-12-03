@@ -56,6 +56,23 @@ def WriteByteDataFile(data_file_name, data):
 
     return dataFileName
 
+def OpenWriteByteDataFile(data_file_name):
+    '''Opens a write-only binary file with the given file name, complete with
+       extension. Returns the file handler. Expects the user to close the
+       file when finished.'''
+    directoryPath = GetScriptDirectory()
+    dataFileName = GetFileNameWithExtension(data_file_name)
+
+    # Append .txt if tere's no file extension given
+    if len(dataFileName.split(".")) < 2:
+        # if there's no extension for the file name...
+        dataFileName += ".txt"
+
+    # Open and write to the file
+    file = open(os.path.join(directoryPath, dataFileName), "wb")
+
+    return file
+
 # Read a binary file with the given file name and return an array of bytes.
 # Returns the array of bytes held in the file.
 def ReadByteDataFile(data_file_name):

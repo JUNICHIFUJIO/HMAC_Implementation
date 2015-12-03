@@ -95,6 +95,47 @@ class MyBitArray:
         except (ZeroDivisionError, IndexError) as error:
             return MyBitArray()
 
+    def SHR(self, n_rotations = 1):
+        ''' Rotates right the bits in the bit array and pads with zeroes on the
+            most significant bits. Returns fresh MyBitArray object.'''
+        # Guard conditions
+        if n_rotations < 0:
+            # Handle invalid input
+            raise ValueError("Desired number of rotations must be greater than or equal to 0.")
+
+        if n_rotations >= len(self.bits):
+            # Handle all cases where the desired number of rotations is greater
+            # than or equal to the maximum allowed.
+            emptyBitArray = MyBitArray()
+            emptyBitArray.bits = [0] * len(self.bits)
+            return emptyBitArray
+        else:
+            result = MyBitArray()
+            result.bits = [0] * n_rotations
+            rotatedBits = self.RotateRight(n_rotations)
+            result.extend(rotatedBits.bits[n_rotations:])
+            return result
+
+    def SHL(self, n_rotations = 1):
+        ''' Rotates left the bits in the bit array and pads with zeroes on the
+            least significant bits. Returns fresh MyBitArray object.'''
+        # Guard conditions
+        if n_rotations < 0:
+            # Handle invalid input
+            raise ValueError("Desired number of rotations must be greater than or equal to 0.")
+
+        if n_rotations >= len(self.bits):
+            # Handle all cases where the desired number of rotations is greater
+            # than or equal to the maximum allowed.
+            emptyBitArray = MyBitArray()
+            emptyBitArray.bits = [0] * len(self.bits)
+            return emptyBitArray
+        else:
+            result = MyBitArray()
+            result.extend(self.RotateLeft(n_rotations)[:len(self) - n_rotations])
+            result.extend([0] * n_rotations)
+            return result
+
     ######################################
     #           BUILT-IN METHODS
     ######################################
@@ -145,6 +186,22 @@ class MyBitArray:
             result.bits.insert(0, XORBit)
 
         return result
+
+    def __inv__(self):
+        result = MyBitArray()
+        result.FromBits(self.bits)
+        for i in range(len(result)):
+            if result.bits[i] == 0:
+                result.bits[i] = 1
+            elif result.bits[i] == 1:
+                result.bits[i] = 0
+            else:
+                raise ValueError
+
+        return result
+
+    def __invert__(self):
+        return self.__inv__()
 
     def __str__(self):
         string = "["
@@ -219,6 +276,15 @@ if __name__ == "__main__":
     print(BitArray.RotateLeft(3))
     print("Testing original Bit array")
     print(BitArray)
+    print("Testing SHR method with 2 rotations:")
+    print(BitArray.SHR(2))
+    excessRotations = len(BitArray) + 1
+    print("Testing SHR method with " + str(excessRotations) + " rotations: (length of bit array is " + str(len(BitArray)) + ")")
+    print(BitArray.SHR(excessRotations))
+    print("Testing SHL method with 2 rotations:")
+    print(BitArray.SHL(2))
+    print("Testing SHL method with " + str(excessRotations) + " rotations: (length of bit array is " + str(len(BitArray)) + ")")
+    print(BitArray.SHL(excessRotations))
     print()
     print("Testing __len__()")
     print(len(BitArray))
@@ -228,6 +294,9 @@ if __name__ == "__main__":
     OtherBitArray = MyBitArray()
     OtherBitArray.FromBytes(bytes([8, 0, 0]))
     print((BitArray ^ OtherBitArray))
+    print("Testing __not__()")
+    print(~BitArray)
+    print("Testing append method:")
     BitArray.append(1)
     print(BitArray)
     try:
